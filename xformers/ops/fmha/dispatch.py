@@ -11,6 +11,10 @@ from . import cutlass, flash, small_k, triton
 from .attn_bias import BlockDiagonalMask
 from .common import AttentionBwOpBase, AttentionFwOpBase, Inputs
 
+# Added for mps
+def mha_mps(*args, **kwargs):
+    # Call your Swift implemented kernel here using the ctypes wrapper function
+    return multi_head_self_attention(*args, **kwargs)
 
 def _is_cutlass_fwd_faster_than_flash(inp: Inputs) -> bool:
     # Very small batch sizes - if batch size specified

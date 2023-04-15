@@ -53,7 +53,7 @@ class FwOp(AttentionFwOpBase):
     """
 
     OPERATOR = get_xformers_operator("efficient_attention_forward_small_k")
-    SUPPORTED_DEVICES = {"cuda", "cpu"}
+    SUPPORTED_DEVICES = {"cuda", "cpu", "mps"}
     SUPPORTED_DTYPES = {torch.float}
     SUPPORTED_MAX_K: float = 32
     SUPPORTED_ATTN_BIAS_TYPES: Set[Any] = {type(None), torch.Tensor}
@@ -68,18 +68,28 @@ class FwOp(AttentionFwOpBase):
     _TEST_BATCH_SIZES = [1, 3]
     _TEST_K = [2, 3, 8, 16, 32]
 
-    @classmethod
-    def not_supported_reasons(cls, d: Inputs) -> List[str]:
-        reasons = super(FwOp, cls).not_supported_reasons(d)
-        if isinstance(d.attn_bias, torch.Tensor) and d.attn_bias.stride(1) != 0:
-            reasons.append("bias with non-zero stride not supported")
-        buffer_size = 8
-        k = d.query.shape[-1]
-        for pack in [1, 2, 4]:
-            if (k % pack) == 0 and (k // pack) <= buffer_size:
-                return reasons
+@classmethod
+def not_supported_reasons(cls, d: Inputs) -> List[str]:
+    reasons = super(FwOp, cls).not_supported_reasons(d)
+
+    if d.device not in supported_devices:
+        reasons.append(f"device={d.device} (supported: {supported_devices})")
+
+    if isinstance(d.attn_bias, torch.Tensor) and d.attn_bias.stride(1) != 0:
+        reasons.append("bias with non-zero stride not supported")
+
+    buffer_size = 8
+    k = d.query.shape[-1]
+    for pack in [1, 2, 4]:
+        if (k % pack) == 0 and (k // pack) <= buffer_size:
+            return reasons
+
+    if d.device == "mps":
+        reasons.append("unsupported embed per head: 512 (mps)")
+    else:
         reasons.append(f"unsupported embed per head: {k}")
-        return reasons
+
+    return reasons
 
     @classmethod
     def apply(
